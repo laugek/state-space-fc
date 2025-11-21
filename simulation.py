@@ -1,10 +1,18 @@
 #%%
-import gym
+"""
+Simulation of football matches and tournaments using xG models.
+
+I'm working on assumption that xG is available as a static value for a given player. 
+I guess it should depend on match context like opponent for example in reality, but in the context of a Fantasy Cup where you purchase a specific player, I think this makes sense.
+
+"""
+import gymnasium as gym
 import numpy as np
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Dict
 import pandas as pd
+import plotly.express as px
 
 import math
 
@@ -66,8 +74,7 @@ griez = Player(
     xG=0.56
 )
 
-
-rasmus_hojlund
+print(rasmus_hojlund)
 
 #%%
 @dataclass
@@ -113,7 +120,7 @@ mix = Team(
     roster=[mbappe, rasmus_hojlund], 
 )
 
-denmark
+print(denmark)
 
 #%%
 def allocate_goals(goals: int, players: List[Player]):
@@ -175,14 +182,31 @@ class Match:
             players_scored_team_1=players_scored_team_1,
             players_scored_team_2=players_scored_team_2
         )
-
+#%%
 match = Match(denmark, france)
 result = match.simulate()
-result
 print(result)
 print(result.players_scored_team_1)
 print(result.players_scored_team_2)
-
+#%%
+difference_goals = []
+for _ in range(100_000):
+    match = Match(denmark, france)
+    result = match.simulate()
+    difference_goals.append(result.goals_team_1 - result.goals_team_2)  
+#%%
+# Histrograme and dotted line for median
+px.histogram(pd.Series(difference_goals), 
+    title="Distribution of goal difference (Denmark - France)",
+    labels={"value": "Goal difference"},
+    nbins=30
+).add_vline(
+    x=pd.Series(difference_goals).median(),
+    line_dash="dash",
+    line_color="red",
+    annotation_text="Median",
+    annotation_position="top left"
+).show()
 #%%
 class TournamentGroup:
 
@@ -239,9 +263,6 @@ print(group.goals)
 print(group.ranking())
 
 #%%
-
-
-#%%
 class Knockout:
 
     def __init__(self, teams: List[Team]) -> None:
@@ -267,6 +288,7 @@ class Tournament:
     def __init__(
             self, 
             group_stage: List[TournamentGroup],
+            # TODO: implement
             knockout_stage = Knockout 
         ) -> None:
         self.group_stage = group_stage
@@ -280,35 +302,6 @@ class Tournament:
 
 
 
-#%%
-goals_denmark, goals_france = [], []
-for _ in range(10_000):
-    math_result = simulate_match(denmark, france)
-    goals_denmark.append(math_result.goals_team_1)
-    goals_france.append(math_result.goals_team_2)
-
-df = pd.DataFrame({"goals_denmark": goals_denmark, "goals_france": goals_france})
-df['outcome'] = df.apply(
-    lambda row: 'win_dk' if row['goals_denmark'] > row['goals_france']
-    else (
-        'draw' if row['goals_denmark'] == row['goals_france'] 
-        else 'win_fr'
-    ),
-    axis=1
-)   
-df.describe(percentiles=[0.90, 0.95, 0.99])
-#%%
-df['outcome'].value_counts(normalize=True)
-#%%
-#%%
-#%%
-#%%
-#%%
-#%%
-#%%
-#%%
-#%%
-#%%
 #%%
 class FantasySoccerEnv(gym.Env):
     def __init__(self, config=None):
