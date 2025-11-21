@@ -29,6 +29,7 @@ def xG_to_probability(xG, max_goals=10):
     return probabilities
 
 #%%
+# Step 0: Define some data structures
 class Position(Enum):
     GOALKEEPER = 1
     DEFENDER = 2
@@ -123,6 +124,7 @@ mix = Team(
 print(denmark)
 
 #%%
+# Step 1: Simulation capabilities
 def allocate_goals(goals: int, players: List[Player]):
     total_xG = sum([player.xG for player in players])
     normalized_xG = {player.name: player.xG / total_xG for player in players}
@@ -303,6 +305,7 @@ class Tournament:
 
 
 #%%
+# Step 2: Define a Gym Environment
 class FantasySoccerEnv(gym.Env):
     def __init__(self, config=None):
         super().__init__()
