@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 
-from models import Position, Player, Team, Match
+from models import Position, Player, Team, MatchResult
 
 def odds_to_probability(odds: float) -> float:
     log_odds = math.log(odds)
@@ -25,7 +25,6 @@ def xG_to_probability(xG: float, max_goals: int = 10) -> Dict[int, float]:
     return probabilities
 
 #%%
-# Step 1: Simulation capabilities
 kasper_scmeichel = Player(
     name="Kasper Schmeichel", 
     position=Position.GOALKEEPER, 
@@ -58,8 +57,6 @@ griez = Player(
     value=7_000_000,
     xG=0.56
 )
-
-# Teams
 france = Team(
     name="France", 
     xG=2.6, 
@@ -68,7 +65,9 @@ france = Team(
     roster=[mbappe, griez], 
 )
 #%%
+# The match is the most basic unit of simulation
 def allocate_goals(goals: int, players: List[Player]):
+    """Allocate a number of goals among players based on their xG values."""
     total_xG = sum([player.xG for player in players])
     normalized_xG = {player.name: player.xG / total_xG for player in players}
     goals_distribution = np.random.choice(list(normalized_xG.keys()), size=goals, p=list(normalized_xG.values()))
@@ -77,7 +76,32 @@ def allocate_goals(goals: int, players: List[Player]):
         for player in players
     }
 
-allocate_goals(1000, denmark.roster)
+class Match:
+
+    def __init__(self, team_1: Team, team_2: Team) -> None:
+        self.team_1 = team_1
+        self.team_2 = team_2
+
+    def simulate(self) -> MatchResult:
+        # Goals scored as team
+        # TODO: Figure out how good teams should score more against worse than average teams
+        # TODO: Goals scored a quite high. 
+        goals_team_1 = np.random.poisson(self.team_1.xG)
+        goals_team_2 = np.random.poisson(self.team_2.xG)
+
+        # Individual goals scored
+        # TODO: Figure out how to simulate who's playing the game or not
+        players_scored_team_1 = allocate_goals(goals_team_1, self.team_1.roster)
+        players_scored_team_2 = allocate_goals(goals_team_2, self.team_2.roster)
+
+        return MatchResult(
+            team_1=self.team_1,
+            team_2=self.team_2,
+            goals_team_1=goals_team_1,
+            goals_team_2=goals_team_2,
+            players_scored_team_1=players_scored_team_1,
+            players_scored_team_2=players_scored_team_2
+        )
 
 #%%
 match = Match(denmark, france)
@@ -105,7 +129,9 @@ px.histogram(pd.Series(difference_goals),
     annotation_position="top left"
 ).show()
 #%%
-class TournamentGroup:
+# The Tournament is a collection of matches, played in a specic way. 
+# TournamentGroup is when all teams play each other once.
+class GroupTournament:
 
     def __init__(self, teams: List[Team]) -> None:
         self.teams = teams
@@ -148,7 +174,7 @@ class TournamentGroup:
         # sort by points then goals (both descending)
         return sorted(self.teams, key=lambda t: (self.points[t], self.goals[t]), reverse=True)
 
-group = TournamentGroup(teams=[denmark, france, mix])
+group = GroupTournament(teams=[denmark, france, mix])
 group.simulate()
 for match in group.match_results:
     print(match)
@@ -157,7 +183,8 @@ print(f"group.goals: {group.goals}")
 print(f"group.ranking: {group.ranking()}")
 
 #%%
-class Knockout:
+# Knockout tournament where losing team is eliminated.
+class KnockoutTournament:
 
     def __init__(self, teams: List[Team]) -> None:
         self.teams = teams
@@ -191,18 +218,19 @@ class Knockout:
             raise ValueError("Knockout has not been simulated yet")
         return self.teams
 
-knockout = Knockout(teams=[denmark, france, mix])
+knockout = KnockoutTournament(teams=[denmark, france, mix])
 knockout.simulate()
 for match in knockout.match_results:
     print(match)
 
 #%%
+# The Tournament combines group stage and knockout stage usually.
 class Tournament:
     def __init__(
             self, 
-            group_stage: List[TournamentGroup],
+            group_stage: List[GroupTournament],
             # TODO: implement
-            knockout_stage = Knockout 
+            knockout_stage = KnockoutTournament 
         ) -> None:
         self.group_stage = group_stage
 

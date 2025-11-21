@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Dict, Optional
+import numpy as np  
 
 class Position(Enum):
     GOALKEEPER = 1
@@ -75,32 +76,7 @@ class MatchResult:
         xG=0.89
     )
 
-class Match:
 
-    def __init__(self, team_1: Team, team_2: Team) -> None:
-        self.team_1 = team_1
-        self.team_2 = team_2
-
-    def simulate(self) -> MatchResult:
-        # Goals scored as team
-        # TODO: Figure out how good teams should score more against worse than average teams
-        # TODO: Goals scored a quite high. 
-        goals_team_1 = np.random.poisson(self.team_1.xG)
-        goals_team_2 = np.random.poisson(self.team_2.xG)
-
-        # Individual goals scored
-        # TODO: Figure out how to simulate who's playing the game or not
-        players_scored_team_1 = allocate_goals(goals_team_1, self.team_1.roster)
-        players_scored_team_2 = allocate_goals(goals_team_2, self.team_2.roster)
-
-        return MatchResult(
-            team_1=self.team_1,
-            team_2=self.team_2,
-            goals_team_1=goals_team_1,
-            goals_team_2=goals_team_2,
-            players_scored_team_1=players_scored_team_1,
-            players_scored_team_2=players_scored_team_2
-        )
 if __name__ == "__main__":
     kasper_scmeichel = Player(
         name="Kasper Schmeichel", 
@@ -155,3 +131,8 @@ if __name__ == "__main__":
         roster=[mbappe, rasmus_hojlund], 
     )
     print(denmark)
+
+    match = Match(denmark, france)
+    result = match.simulate()
+    print(result)
+    print(result.players_scored_team_1) 
