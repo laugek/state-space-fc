@@ -7,13 +7,12 @@ I guess it should depend on match context like opponent for example in reality, 
 
 """
 import math
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import List, Optional, Dict, Iterator
+from typing import List, Dict, Iterator
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import gymnasium as gym
+
+from models import Position, Player, Team, Match
 
 def odds_to_probability(odds: float) -> float:
     log_odds = math.log(odds)
@@ -26,26 +25,7 @@ def xG_to_probability(xG: float, max_goals: int = 10) -> Dict[int, float]:
     return probabilities
 
 #%%
-# Step 0: Define some data structures
-class Position(Enum):
-    GOALKEEPER = 1
-    DEFENDER = 2
-    MIDFIELDER = 3
-    FORWARD = 4
-
-@dataclass
-class Player:
-    name: str
-    position: Position 
-    value: float
-    xG: float
-
-    def __repr__(self) -> str:
-        return f"{self.name} ({self.position.name})"
-
-    def __hash__(self):
-        return hash(self.name)
-
+# Step 1: Simulation capabilities
 kasper_scmeichel = Player(
     name="Kasper Schmeichel", 
     position=Position.GOALKEEPER, 
@@ -57,6 +37,13 @@ rasmus_hojlund = Player(
     position=Position.FORWARD, 
     value=6_000_000,
     xG=0.89
+)
+denmark = Team(
+    name="Denmark", 
+    xG=1.9, 
+    xGa=0.76,
+    clean_sheet_pct=0.3,
+    roster=[kasper_scmeichel, rasmus_hojlund], 
 )
 
 mbappe = Player(
@@ -72,28 +59,7 @@ griez = Player(
     xG=0.56
 )
 
-print(rasmus_hojlund)
-
-#%%
-@dataclass
-class Team: 
-    name: str
-    roster: List[Player]
-    xG: float
-    xGa: float
-    clean_sheet_pct: float
-
-    def __post_init__(self):
-        self.xGD = self.xG - self.xGa
-        self.proba_goals_scored = xG_to_probability(self.xG)
-        self.proba_goals_conceded = xG_to_probability(self.xGa)
-
-    def __repr__(self) -> str:
-        return f"{self.name}"
-
-    def __hash__(self):
-        return hash(self.name)
-
+# Teams
 france = Team(
     name="France", 
     xG=2.6, 
@@ -101,27 +67,7 @@ france = Team(
     clean_sheet_pct=0.25,
     roster=[mbappe, griez], 
 )
-
-denmark = Team(
-    name="Denmark", 
-    xG=1.9, 
-    xGa=0.76,
-    clean_sheet_pct=0.3,
-    roster=[kasper_scmeichel, rasmus_hojlund], 
-)
-
-mix = Team(
-    name="Mix", 
-    xG=2.1, 
-    xGa=0.99,
-    clean_sheet_pct=0.15,
-    roster=[mbappe, rasmus_hojlund], 
-)
-
-print(denmark)
-
 #%%
-# Step 1: Simulation capabilities
 def allocate_goals(goals: int, players: List[Player]):
     total_xG = sum([player.xG for player in players])
     normalized_xG = {player.name: player.xG / total_xG for player in players}
@@ -132,55 +78,7 @@ def allocate_goals(goals: int, players: List[Player]):
     }
 
 allocate_goals(1000, denmark.roster)
-#%%
-@dataclass
-class MatchResult:
-    team_1: Team
-    team_2: Team
 
-    goals_team_1: int
-    goals_team_2: int
-
-    players_scored_team_1: dict[Player, int]
-    players_scored_team_2: dict[Player, int]
-
-    def __post_init__(self):
-        if self.goals_team_1 > self.goals_team_2:
-            self.winner = self.team_1
-        elif self.goals_team_1 < self.goals_team_2:
-            self.winner = self.team_2
-        else:
-            self.winner = None
-
-    def __repr__(self) -> str:
-        return f"{self.team_1} {self.goals_team_1} - {self.goals_team_2} {self.team_2}"
-
-class Match:
-
-    def __init__(self, team_1: Team, team_2: Team) -> None:
-        self.team_1 = team_1
-        self.team_2 = team_2
-
-    def simulate(self) -> MatchResult:
-        # Goals scored as team
-        # TODO: Figure out how good teams should score more against worse than average teams
-        # TODO: Goals scored a quite high. 
-        goals_team_1 = np.random.poisson(self.team_1.xG)
-        goals_team_2 = np.random.poisson(self.team_2.xG)
-
-        # Individual goals scored
-        # TODO: Figure out how to simulate who's playing the game or not
-        players_scored_team_1 = allocate_goals(goals_team_1, self.team_1.roster)
-        players_scored_team_2 = allocate_goals(goals_team_2, self.team_2.roster)
-
-        return MatchResult(
-            team_1=self.team_1,
-            team_2=self.team_2,
-            goals_team_1=goals_team_1,
-            goals_team_2=goals_team_2,
-            players_scored_team_1=players_scored_team_1,
-            players_scored_team_2=players_scored_team_2
-        )
 #%%
 match = Match(denmark, france)
 result = match.simulate()
@@ -316,18 +214,4 @@ class Tournament:
         # Knockout stages
 
 
-
-#%%
-# Step 2: Define a Gym Environment
-class FantasySoccerEnv(gym.Env):
-    def __init__(self, config: Optional[dict] = None):
-        super().__init__()
-        config = config or {}
-        self.budget = config.get("budget", 50_000_000)
-        self.lineup_style = config.get("lineup_style", [4, 4, 3])
-        self.tournament_schedule = config.get("tournament_schedule", [])
-        # state placeholders
-        self.team_roster: List[Player] = []
-        self.current_step = 0
-        self.max_steps = config.get("max_steps", 10)
 
