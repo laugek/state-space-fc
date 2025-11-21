@@ -6,26 +6,23 @@ I'm working on assumption that xG is available as a static value for a given pla
 I guess it should depend on match context like opponent for example in reality, but in the context of a Fantasy Cup where you purchase a specific player, I think this makes sense.
 
 """
-import gymnasium as gym
-import numpy as np
+import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Iterator
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import gymnasium as gym
 
-import math
-
-def odds_to_probability(odds):
+def odds_to_probability(odds: float) -> float:
     log_odds = math.log(odds)
-    probability = 1 / (1 + math.exp(-log_odds))
-    return probability
+    return 1 / (1 + math.exp(-log_odds))
 
-def xG_to_probability(xG, max_goals=10):
-    probabilities = {}
+def xG_to_probability(xG: float, max_goals: int = 10) -> Dict[int, float]:
+    probabilities: Dict[int, float] = {}
     for k in range(max_goals + 1):
-        prob_k = (math.exp(-xG) * xG**k) / math.factorial(k)
-        probabilities[k] = prob_k
+        probabilities[k] = (math.exp(-xG) * xG**k) / math.factorial(k)
     return probabilities
 
 #%%
@@ -63,8 +60,8 @@ rasmus_hojlund = Player(
 )
 
 mbappe = Player(
-    name="Kylian Mbappé", 
-    position=Position.GOALKEEPER, 
+    name="Kylian Mbappé",
+    position=Position.FORWARD,
     value=8_000_000,
     xG=1.2
 )
@@ -89,7 +86,7 @@ class Team:
     def __post_init__(self):
         self.xGD = self.xG - self.xGa
         self.proba_goals_scored = xG_to_probability(self.xG)
-        self.proba_goals_conceeded = xG_to_probability(self.xGa)
+        self.proba_goals_conceded = xG_to_probability(self.xGa)
 
     def __repr__(self) -> str:
         return f"{self.name}"
@@ -214,46 +211,44 @@ class TournamentGroup:
 
     def __init__(self, teams: List[Team]) -> None:
         self.teams = teams
+        # instance-level state (previously class-level)
+        self.match_results: List['MatchResult'] = []
+        self.simulated: bool = False
+        self.points: Dict[Team, int] = {}
+        self.goals: Dict[Team, int] = {}
 
-    match_results: List[MatchResult] = []
-    simulated: bool = False
-
-    def matches(self):
-        # Generate all possible matches in the group stage
-        # Teams don't play home and away, just once
+    def matches(self) -> Iterator['Match']:
+        # Generate all possible matches in the group stage (single round-robin)
         for i, team_1 in enumerate(self.teams):
             for team_2 in self.teams[i + 1:]:
                 yield Match(team_1, team_2)
 
-    def simulate(self):
+    def simulate(self) -> None:
+        # reset state for repeated simulations
         self.points = {team: 0 for team in self.teams}
         self.goals = {team: 0 for team in self.teams}
+        self.match_results = []
 
-        # Simulate all matches in the tournament
         for match in self.matches():
-            match_result = match.simulate() 
+            match_result = match.simulate()
             self.match_results.append(match_result)
 
-            # allocate points to teams
             if match_result.winner:
-                self.points[match_result.winner] = self.points[match_result.winner] + 3
+                self.points[match_result.winner] += 3
             else:
-                self.points[match_result.team_1] = self.points[match_result.team_1] + 1
-                self.points[match_result.team_2] = self.points[match_result.team_2] + 1
+                self.points[match_result.team_1] += 1
+                self.points[match_result.team_2] += 1
 
-            # store goals
-            self.goals[match_result.team_1] = self.goals[match_result.team_1] + match_result.goals_team_1
-            self.goals[match_result.team_2] = self.goals[match_result.team_2] + match_result.goals_team_2
+            self.goals[match_result.team_1] += match_result.goals_team_1
+            self.goals[match_result.team_2] += match_result.goals_team_2
 
         self.simulated = True
 
-    def ranking(self):
-        # Return the top two teams in the group
+    def ranking(self) -> List[Team]:
         if not self.simulated:
             raise ValueError("Matches has not been simulated yet")
-
-        # TODO: fix ties by looking at points, then then goals scored?
-        sorted_teams = sorted(self.teams, key=lambda team: (self.points[team], self.goals[team]), reverse=True)
+        # sort by points then goals (both descending)
+        sorted_teams = sorted(self.teams, key=lambda t: (self.points[t], self.goals[t]), reverse=True)
         return sorted_teams[:2]
 
 group = TournamentGroup(teams=[denmark, france, mix])
@@ -269,21 +264,33 @@ class Knockout:
 
     def __init__(self, teams: List[Team]) -> None:
         self.teams = teams
+        self.match_results: List['MatchResult'] = []
+        self.simulated: bool = False
 
-    match_results: List[MatchResult] = []
-    simulated: bool = False
+    def matches(self) -> Iterator['Match']:
+        # simple pairing: 0 vs 1, 2 vs 3, ...
+        for i in range(0, len(self.teams), 2):
+            if i + 1 < len(self.teams):
+                yield Match(self.teams[i], self.teams[i + 1])
 
-    def matches(self):
-        pass
+    def simulate(self) -> None:
+        self.match_results = []
+        winners: List[Team] = []
+        for match in self.matches():
+            result = match.simulate()
+            self.match_results.append(result)
+            if result.winner:
+                winners.append(result.winner)
+            else:
+                # tie-breaker: random choice between the two teams
+                winners.append(np.random.choice([result.team_1, result.team_2]))
+        self.teams = winners
+        self.simulated = True
 
-    def simulate(self):
-        pass
-
-    def ranking(self):
-        # Return the top two teams in the group
+    def ranking(self) -> List[Team]:
         if not self.simulated:
-            raise ValueError("Matches has not been simulated yet")
-
+            raise ValueError("Knockout has not been simulated yet")
+        return self.teams
 
 #%%
 class Tournament:
@@ -307,52 +314,46 @@ class Tournament:
 #%%
 # Step 2: Define a Gym Environment
 class FantasySoccerEnv(gym.Env):
-    def __init__(self, config=None):
+    def __init__(self, config: Optional[dict] = None):
         super().__init__()
-        # Initialize environment parameters
-        self.budget = config.get("budget", 50_000_000)  # Default budget DKK
-        self.lineup_style = config.get("lineup_style", [4, 4, 3])  # Default lineup style
-        self.tournament_schedule = config.get("tournament_schedule", [])  # Future games
-
-        # Other initialization (player values, team composition, etc.)
-        # ...
+        config = config or {}
+        self.budget = config.get("budget", 50_000_000)
+        self.lineup_style = config.get("lineup_style", [4, 4, 3])
+        self.tournament_schedule = config.get("tournament_schedule", [])
+        # state placeholders
+        self.team_roster: List[Player] = []
+        self.current_step = 0
+        self.max_steps = config.get("max_steps", 10)
 
     def reset(self):
-        # Reset environment for a new episode
-        # Initialize player values, team composition, budget, etc.
-        # ...
-        observation = self._get_observation()  # Define observation function
-        return observation
+        """Reset environment and return a simple observation dict."""
+        self.current_step = 0
+        self.team_roster = []
+        return self._get_observation()
 
-    def step(self, action):
-        # Execute the chosen action (buy/sell players, allocate budget)
-        # Update player values, team composition, budget, etc.
-        # Compute reward based on team performance
-        # Check termination conditions
-        # ...
-        next_observation = self._get_observation()  # Update observation
-        reward = self._compute_reward()  # Define reward function
-        done = self._check_termination()  # Define termination conditions
-        return next_observation, reward, done, {}
+    def reset(self, *, seed: int | None = None, options: Dict[str, math.Any] | None = None) -> tuple[Any, dict[str, Any]]:
+    """Apply action (no-op placeholder), advance step, return obs, reward, done, info."""
+        self.current_step += 1
+        obs = self._get_observation()
+        reward = self._compute_reward()
+        done = self._check_termination()
+        info = {}
+        return obs, reward, done, info
 
     def render(self):
-        # Optionally visualize the environment (print relevant info)
-        # ...
-        pass
+        print(f"Step {self.current_step} | Budget: {self.budget} | Roster size: {len(self.team_roster)}")
 
-    def _get_observation(self):
-        # Define how the agent observes the state
-        # Return relevant features (player values, team composition, etc.)
-        # ...
-        return observation
+    def _get_observation(self) -> dict:
+        return {
+            "budget": self.budget,
+            "lineup_style": list(self.lineup_style),
+            "roster_size": len(self.team_roster),
+            "step": self.current_step
+        }
 
-    def _compute_reward(self):
-        # Define the reward function based on team performance
-        # Consider player values, match outcomes, etc.
-        # ...
-        return reward
+    def _compute_reward(self) -> float:
+        # placeholder reward, can be replaced with performance-based metric
+        return 0.0
 
-    def _check_termination(self):
-        # Define termination conditions (end of tournament, budget depletion, etc.)
-        # ...
-        return done
+    def _check_termination(self) -> bool:
+        return self.current_step >= self.max_steps
