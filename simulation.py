@@ -189,7 +189,7 @@ print(result.players_scored_team_1)
 print(result.players_scored_team_2)
 #%%
 difference_goals = []
-for _ in range(100_000):
+for _ in range(10_000):
     match = Match(denmark, france)
     result = match.simulate()
     difference_goals.append(result.goals_team_1 - result.goals_team_2)  
@@ -248,16 +248,15 @@ class TournamentGroup:
         if not self.simulated:
             raise ValueError("Matches has not been simulated yet")
         # sort by points then goals (both descending)
-        sorted_teams = sorted(self.teams, key=lambda t: (self.points[t], self.goals[t]), reverse=True)
-        return sorted_teams[:2]
+        return sorted(self.teams, key=lambda t: (self.points[t], self.goals[t]), reverse=True)
 
 group = TournamentGroup(teams=[denmark, france, mix])
 group.simulate()
 for match in group.match_results:
     print(match)
-print(group.points)
-print(group.goals)
-print(group.ranking())
+print(f"group.points: {group.points}")
+print(f"group.goals: {group.goals}")
+print(f"group.ranking: {group.ranking()}")
 
 #%%
 class Knockout:
@@ -266,6 +265,7 @@ class Knockout:
         self.teams = teams
         self.match_results: List['MatchResult'] = []
         self.simulated: bool = False
+        # TODO: some concept of stages
 
     def matches(self) -> Iterator['Match']:
         # simple pairing: 0 vs 1, 2 vs 3, ...
@@ -283,7 +283,8 @@ class Knockout:
                 winners.append(result.winner)
             else:
                 # tie-breaker: random choice between the two teams
-                winners.append(np.random.choice([result.team_1, result.team_2]))
+                random_winner = np.random.choice([result.team_1, result.team_2], 1)[0]
+                winners.append(random_winner)
         self.teams = winners
         self.simulated = True
 
@@ -291,6 +292,11 @@ class Knockout:
         if not self.simulated:
             raise ValueError("Knockout has not been simulated yet")
         return self.teams
+
+knockout = Knockout(teams=[denmark, france, mix])
+knockout.simulate()
+for match in knockout.match_results:
+    print(match)
 
 #%%
 class Tournament:
@@ -306,7 +312,7 @@ class Tournament:
         # TournamentGroup stages
         for group in self.group_stage:
             group.simulate()
-        
+
         # Knockout stages
 
 
@@ -325,35 +331,3 @@ class FantasySoccerEnv(gym.Env):
         self.current_step = 0
         self.max_steps = config.get("max_steps", 10)
 
-    def reset(self):
-        """Reset environment and return a simple observation dict."""
-        self.current_step = 0
-        self.team_roster = []
-        return self._get_observation()
-
-    def reset(self, *, seed: int | None = None, options: Dict[str, math.Any] | None = None) -> tuple[Any, dict[str, Any]]:
-    """Apply action (no-op placeholder), advance step, return obs, reward, done, info."""
-        self.current_step += 1
-        obs = self._get_observation()
-        reward = self._compute_reward()
-        done = self._check_termination()
-        info = {}
-        return obs, reward, done, info
-
-    def render(self):
-        print(f"Step {self.current_step} | Budget: {self.budget} | Roster size: {len(self.team_roster)}")
-
-    def _get_observation(self) -> dict:
-        return {
-            "budget": self.budget,
-            "lineup_style": list(self.lineup_style),
-            "roster_size": len(self.team_roster),
-            "step": self.current_step
-        }
-
-    def _compute_reward(self) -> float:
-        # placeholder reward, can be replaced with performance-based metric
-        return 0.0
-
-    def _check_termination(self) -> bool:
-        return self.current_step >= self.max_steps
