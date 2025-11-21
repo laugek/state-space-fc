@@ -10,6 +10,6 @@ Todo list
 - [x] Basic data structures
 - [x] Match simulation
 - [x] Group simulation
-- [] Knockout simulation
-- [] RL environment
-- [] ...
+- [ ] Knockout simulation
+- [ ] RL environment
+- [ ] ...
