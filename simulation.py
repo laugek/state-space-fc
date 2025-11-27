@@ -174,7 +174,7 @@ class GroupTournament:
         # sort by points then goals (both descending)
         return sorted(self.teams, key=lambda t: (self.points[t], self.goals[t]), reverse=True)
 
-group = GroupTournament(teams=[denmark, france, mix])
+group = GroupTournament(teams=[denmark, france])
 group.simulate()
 for match in group.match_results:
     print(match)
