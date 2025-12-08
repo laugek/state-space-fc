@@ -1,3 +1,4 @@
+#%%
 """
 Key Design Questions (gymnasium create custom evn)[https://gymnasium.farama.org/introduction/create_custom_env/]
 🎯 What skill should the agent learn?
@@ -28,13 +29,15 @@ Version 1: as simple as possible
 - no captain
 - two players to choose from
 - same teams play each other each round
+- cash limit high enough to buy any players
 """
 
 
+#%%
 from models import Player, Position
 from typing import List, Optional
 import gymnasium as gym
-from gymnasium.spaces import MultiDiscrete
+from gymnasium.spaces import Discrete, MultiDiscrete
 import numpy as np
 class FantasySoccerEnvV1(gym.Env):
 
@@ -42,7 +45,7 @@ class FantasySoccerEnvV1(gym.Env):
 
         # Init state
         self.roster: List[Player] = []
-        self.team_value: float = self.calculate_team_value()
+        self.team_value: float = self.calculate_roster_value()
         self.cash: float = 50_000_000 
         self.total_value: float = self.team_value + self.cash
 
@@ -55,14 +58,13 @@ class FantasySoccerEnvV1(gym.Env):
 
         # Define what actions are available (4 directions)
         self.action_space = gym.spaces.Dict({
-            "foward": MultiDiscrete(np.array([1, 1])) # would be +100 considering all players
-            # "midfielder": MultiDiscrete(np.array([1, 1])),
+            "forward": Discrete(2),
+            # "midfielder": Discrete(2),
             # ... etc
         })
 
-        # Map action numbers to actual actions
-        # This makes the code more readable than using raw numbers
-        self._action_to_player = {
+        # Keep track of index mapping to players and their value
+        self._all_players_list = {
             0: Player(
                 name="Rasmus Hojlund", 
                 position=Position.FORWARD, 
@@ -78,9 +80,17 @@ class FantasySoccerEnvV1(gym.Env):
             # 2: Player (...) I wonder how I'll scale this.
         }
 
-    def calculate_team_value(self) -> float:
+    def _action_to_player(self, action: dict) -> Player:
+        """Map action number to Player object by their index."""
+        return self._all_players_list[action["forward"]]
+
+    def calculate_roster_value(self) -> float:
         """Calculate total value of current roster."""
         return sum(player.value for player in self.roster)
+
+    def calculate_total_value(self) -> float:
+        """Calculate total value of roster + cash."""
+        return self.calculate_roster_value() + self.cash
 
     def _get_info(self):
         """Compute auxiliary information for debugging.
@@ -93,6 +103,7 @@ class FantasySoccerEnvV1(gym.Env):
             "team_value": self.team_value,
             "cash": self.cash,
             "total_value": self.total_value,
+            "all_players_value": {idx: player.value for idx, player in self._all_players_list.items()},
         }
 
     def _get_obs(self):
@@ -120,10 +131,10 @@ class FantasySoccerEnvV1(gym.Env):
         super().reset(seed=seed)
 
         # Randomly place the agent anywhere on the grid
-        self.roster: List[Player] = []
-        self.team_value: float = self.calculate_team_value()
         self.cash: float = 50_000_000 
-        self.total_value: float = self.team_value + self.cash
+        self.roster: List[Player] = []
+        self.team_value: float = self.calculate_roster_value()
+        self.total_value: float = self.calculate_total_value()
 
         observation = self._get_obs()
         info = self._get_info()
@@ -140,7 +151,18 @@ class FantasySoccerEnvV1(gym.Env):
             tuple: (observation, reward, terminated, truncated, info)
         """
 
-        roster = some_function(action)
+        # Update roster based on action taken
+        self.roster = [self._action_to_player(action)]
+        self.cash -= self.roster[0].value
+
+        # Update team value and total value after games played
+        # Now I'll just add fixed percentage increase for simplicity
+        for _, player in self._all_players_list.items():
+            player.value *= 1.05 
+
+        # Update team value based on new player values
+        self.team_value = self.calculate_roster_value()
+        self.total_value = self.calculate_total_value()
 
         # Need to set stopping after x rounds of play
         terminated = False
@@ -151,3 +173,36 @@ class FantasySoccerEnvV1(gym.Env):
         info = self._get_info()
 
         return observation, reward, terminated, truncated, info
+
+
+env = FantasySoccerEnvV1()
+observation, info = env.reset()
+print(f"Starting observation: {observation}")
+# %%
+sample_action = env.action_space.sample()
+print(f"Sampled action: {sample_action}")
+print(f"Action maps to player: {env._action_to_player(sample_action)}")
+# %%
+# Take the action and see what happens
+observation, reward, terminated, truncated, info = env.step(sample_action)
+print(f"New observation: {observation}")
+print(f"Reward received: {reward}")
+print(f"Terminated: {terminated}, Truncated: {truncated}")
+print(f"Info: {info}")
+# %%
+env = FantasySoccerEnvV1()
+episode_over = False
+total_reward = 0
+for _ in range(5):  # Simulate 5 steps
+    action = env.action_space.sample()
+
+    # Take the action and see what happens
+    observation, reward, terminated, truncated, info = env.step(action)
+
+    total_reward += reward
+    episode_over = terminated or truncated
+
+print(f"Episode finished! Total reward: {total_reward}")
+env.close()
+
+# %%
