@@ -129,3 +129,25 @@ class FantasySoccerEnvV1(gym.Env):
         info = self._get_info()
 
         return observation, info
+    
+    def step(self, action):
+        """Execute one timestep within the environment.
+
+        Args:
+            action: The action to take (0-3 for directions)
+
+        Returns:
+            tuple: (observation, reward, terminated, truncated, info)
+        """
+
+        roster = some_function(action)
+
+        # Need to set stopping after x rounds of play
+        terminated = False
+        truncated = False
+
+        reward = self.total_value
+        observation = self._get_obs()
+        info = self._get_info()
+
+        return observation, reward, terminated, truncated, info
