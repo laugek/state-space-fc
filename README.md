@@ -11,5 +11,6 @@ Todo list
 - [x] Match simulation
 - [x] Group simulation
 - [ ] Knockout simulation
+- [ ] Manager game rules. Basic: points per goal -- Advanced: points per assist, clean sheet etc
 - [ ] RL environment
 - [ ] ...
