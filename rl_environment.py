@@ -39,7 +39,11 @@ from typing import List, Optional
 import gymnasium as gym
 from gymnasium.spaces import Discrete, MultiDiscrete
 import numpy as np
+from enum import Enum
 
+class Actions(Enum):
+    rasmus_hojlund = 0
+    kylian_mbappe = 1
 
 class FantasySoccerEnvV1(gym.Env):
 
@@ -66,14 +70,14 @@ class FantasySoccerEnvV1(gym.Env):
         })
 
         # Keep track of index mapping to players and their value
-        self._all_players_list = {
-            0: Player(
+        self._action_to_player_dict = {
+            Actions.rasmus_hojlund.value: Player(
                 name="Rasmus Hojlund", 
                 position=Position.FORWARD, 
                 value=6_000_000,
                 xG=0.89
             ),
-            1: Player(
+            Actions.kylian_mbappe.value: Player(
                 name="Kylian Mbappé",
                 position=Position.FORWARD,
                 value=8_000_000,
@@ -84,7 +88,7 @@ class FantasySoccerEnvV1(gym.Env):
 
     def _action_to_player(self, action: dict) -> Player:
         """Map action number to Player object by their index."""
-        return self._all_players_list[action["forward"]]
+        return self._action_to_player_dict[action["forward"]]
 
     def calculate_roster_value(self) -> float:
         """Calculate total value of current roster."""
@@ -105,7 +109,7 @@ class FantasySoccerEnvV1(gym.Env):
             "team_value": self.team_value,
             "cash": self.cash,
             "total_value": self.total_value,
-            "all_players_value": {idx: player.value for idx, player in self._all_players_list.items()},
+            "all_players_value": {idx: player.value for idx, player in self._action_to_player.items()},
         }
 
     def _get_obs(self) -> dict:
@@ -159,7 +163,7 @@ class FantasySoccerEnvV1(gym.Env):
 
         # Update team value and total value after games played
         # Now I'll just add fixed percentage increase for simplicity
-        for _, player in self._all_players_list.items():
+        for _, player in self._action_to_player.items():
             player.value *= 1.05 
 
         # Update team value based on new player values
